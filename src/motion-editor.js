@@ -52,7 +52,8 @@ export function createMotionEditor({ motionForge, canvas }) {
         </div>
       </div>
       <div class="prompt-bar">
-        <input id="motionBrief" type="text" placeholder="描述你想要的动效，然后勾选要动的图层" autocomplete="off" />
+        <div class="prompt-targets" id="promptTargets"></div>
+        <input id="motionBrief" type="text" placeholder="描述选中图层要怎么动" autocomplete="off" />
         <button id="createMotion" type="button">执行</button>
         <span id="briefStatus">Blank project</span>
       </div>
@@ -84,6 +85,18 @@ export function createMotionEditor({ motionForge, canvas }) {
       <div class="ai-preview-box">
         <strong id="selectedLayerName">No layer</strong>
         <span>Select a Figma layer to edit motion properties</span>
+      </div>
+      <div class="engine-panel">
+        <div class="panel-head compact">
+          <strong>Motion Engine</strong>
+          <span id="engineStatus">Three.js</span>
+        </div>
+        <div class="engine-options" role="radiogroup" aria-label="Motion engine">
+          <button class="engine-option selected" data-engine="three" type="button">Three.js</button>
+          <button class="engine-option" data-engine="p5" type="button">p5.js</button>
+          <button class="engine-option" data-engine="lottie" type="button">Lottie</button>
+          <button class="engine-option" data-engine="css" type="button">CSS Motion</button>
+        </div>
       </div>
       <div class="property-list"></div>
       <button id="exportProject" type="button">Export Project JSON</button>
@@ -126,13 +139,18 @@ export function createMotionEditor({ motionForge, canvas }) {
   const redoStack = [];
   let pendingPropertySnapshot = null;
   let previewQuality = "HQ";
+  let currentZoom = "fit";
+  let activeCanvasDrag = null;
   let zoomIndex = 0;
   const zoomOptions = [
     { label: "Fit", value: "fit" },
+    { label: "20%", value: 0.2 },
     { label: "33%", value: 0.33 },
     { label: "50%", value: 0.5 },
     { label: "75%", value: 0.75 },
     { label: "100%", value: 1 },
+    { label: "200%", value: 2 },
+    { label: "500%", value: 5 },
   ];
 
   const layerList = app.querySelector(".layer-list");
@@ -148,6 +166,8 @@ export function createMotionEditor({ motionForge, canvas }) {
   const figmaTokenInput = app.querySelector("#figmaToken");
   const figmaUrlInput = app.querySelector("#figmaUrl");
   const motionBriefInput = app.querySelector("#motionBrief");
+  const promptTargets = app.querySelector("#promptTargets");
+  const engineStatus = app.querySelector("#engineStatus");
   const zoomControl = app.querySelector("#zoomControl");
   const qualityToggle = app.querySelector("#qualityToggle");
   const canvasWidthInput = app.querySelector("#canvasWidth");
@@ -161,6 +181,7 @@ export function createMotionEditor({ motionForge, canvas }) {
   const moveLayerDown = app.querySelector("#moveLayerDown");
   const deleteLayer = app.querySelector("#deleteLayer");
   const applyHomepageMotionButton = app.querySelector("#applyHomepageMotion");
+  let selectedMotionEngine = "three";
 
   figmaUrlInput.value = TARGET_FIGMA_URL;
   motionBriefInput.value = "PC 首页进入动效：导航先出现，主视觉轻微上移淡入，卡片和内容模块错峰浮入，整体有轻微景深感";
@@ -234,6 +255,173 @@ export function createMotionEditor({ motionForge, canvas }) {
     undoStack.push(projectSnapshot());
     restoreSnapshot(redoStack.pop(), "已重做");
   };
+  const formatZoom = (value) => value === "fit" ? "Fit" : `${Math.round(Number(value) * 100)}%`;
+  const setPreviewZoom = (value, statusPrefix = "预览缩放") => {
+    currentZoom = motionForge.setPreviewZoom?.(value) ?? value;
+    zoomControl.textContent = formatZoom(currentZoom);
+    const matchedIndex = zoomOptions.findIndex((option) => option.value === currentZoom || Number(option.value) === Number(currentZoom));
+    if (matchedIndex >= 0) zoomIndex = matchedIndex;
+    setStatus(`${statusPrefix} ${formatZoom(currentZoom)}`);
+    updateCanvasGuide();
+    renderFigmaLayers(Number(scrubber.value));
+  };
+  const zoomByWheel = (deltaY) => {
+    const baseZoom = currentZoom === "fit"
+      ? previewFrame.clientWidth / motionForge.width
+      : Number(currentZoom);
+    const direction = deltaY < 0 ? 1 : -1;
+    const factor = direction > 0 ? 1.1 : 1 / 1.1;
+    setPreviewZoom(Math.max(0.2, Math.min(5, baseZoom * factor)), "画布缩放");
+  };
+  const updateDraggedLayerPosition = (event) => {
+    if (!activeCanvasDrag) return;
+    const scale = previewFrame.clientWidth / motionForge.width || 1;
+    let dx = (event.clientX - activeCanvasDrag.startClientX) / scale;
+    let dy = (event.clientY - activeCanvasDrag.startClientY) / scale;
+    if (event.shiftKey) {
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        dy = 0;
+      } else {
+        dx = 0;
+      }
+    }
+    const layer = getLayer(activeCanvasDrag.layerId);
+    if (!layer) return;
+    const nextX = activeCanvasDrag.startX + dx;
+    const nextY = activeCanvasDrag.startY + dy;
+    const positionX = layer.properties.positionX;
+    const positionY = layer.properties.positionY;
+    if (!positionX || !positionY) return;
+    positionX.value = nextX;
+    positionY.value = nextY;
+    motionForge.setKeyframe(layer.id, "positionX", Number(scrubber.value), nextX);
+    motionForge.setKeyframe(layer.id, "positionY", Number(scrubber.value), nextY);
+    layer.figma.x = nextX;
+    layer.figma.y = nextY;
+    renderProperties();
+    renderTimeline();
+    renderFigmaLayers(Number(scrubber.value));
+  };
+  const finishCanvasDrag = () => {
+    if (!activeCanvasDrag) return;
+    activeCanvasDrag.element?.classList.remove("dragging-canvas-layer");
+    activeCanvasDrag = null;
+    document.body.classList.remove("canvas-layer-dragging");
+    setStatus("图层位置已更新");
+    renderLayers();
+    updateActionAvailability();
+  };
+  const activeMotionTargets = () => {
+    const selected = getLayer(selectedLayerId);
+    if (selected && !selected.staticCanvas) return [selected];
+    return motionForge.project.layers.filter((layer) => layer.kind === "figma" && layer.motionTarget && !layer.staticCanvas);
+  };
+  const renderPromptTargets = () => {
+    const targets = activeMotionTargets();
+    if (!targets.length) {
+      promptTargets.innerHTML = `<span class="target-chip empty">未选图层</span>`;
+      return;
+    }
+    promptTargets.innerHTML = targets.slice(0, 3).map((layer) => (
+      `<button class="target-chip active" data-layer="${layer.id}" type="button">${escapeHtml(layer.name)}</button>`
+    )).join("") + (targets.length > 3 ? `<span class="target-chip more">+${targets.length - 3}</span>` : "");
+    promptTargets.querySelectorAll("[data-layer]").forEach((chip) => {
+      chip.addEventListener("click", () => selectLayerById(chip.dataset.layer, "已选中提示词目标"));
+    });
+  };
+  const setKeyframes = (layer, propertyId, keyframes, value = keyframes.at(-1)?.value) => {
+    const property = layer.properties[propertyId];
+    if (!property) return;
+    property.keyframes = keyframes.map((keyframe) => ({
+      time: Math.max(0, Math.min(motionForge.duration, keyframe.time)),
+      value: Number(keyframe.value),
+    })).sort((a, b) => a.time - b.time);
+    property.value = Number(value);
+  };
+  const applyPromptMotionToTargets = () => {
+    const targets = activeMotionTargets();
+    if (!targets.length) {
+      setStatus("先点击或勾选一个图层");
+      motionBriefInput.focus();
+      return;
+    }
+    const prompt = motionBriefInput.value.trim() || "轻微上移淡入";
+    const lower = prompt.toLowerCase();
+    pushHistory();
+    const duration = motionForge.duration;
+    const enter = Math.min(duration * 0.36, 0.9);
+    const settle = Math.min(duration * 0.52, enter + 0.26);
+    const wantsDown = prompt.includes("下") || lower.includes("down");
+    const wantsLeft = prompt.includes("左") || lower.includes("left");
+    const wantsRight = prompt.includes("右") || lower.includes("right");
+    const wantsRotate = prompt.includes("旋转") || lower.includes("rotate") || selectedMotionEngine === "three";
+    const wantsBounce = prompt.includes("弹") || lower.includes("bounce") || selectedMotionEngine === "p5";
+    const wantsDepth = prompt.includes("景深") || lower.includes("depth") || selectedMotionEngine === "three";
+    const wantsScale = prompt.includes("放大") || prompt.includes("缩放") || lower.includes("scale") || wantsDepth;
+    const offsetY = wantsDown ? -44 : 44;
+    const offsetX = wantsLeft ? 40 : (wantsRight ? -40 : 0);
+    targets.forEach((layer, index) => {
+      if (layer.kind === "figma") {
+        layer.motionTarget = true;
+        layer.figma.previewVisible = true;
+      }
+      const baseX = layer.properties.positionX?.value ?? layer.figma?.x ?? motionForge.width / 2;
+      const baseY = layer.properties.positionY?.value ?? layer.figma?.y ?? motionForge.height / 2;
+      const delay = Math.min(0.5, index * 0.06);
+      const inTime = Math.min(duration - 0.1, enter + delay);
+      const settleTime = Math.min(duration - 0.05, settle + delay);
+      setKeyframes(layer, "positionX", [
+        { time: 0, value: baseX + offsetX },
+        { time: delay, value: baseX + offsetX },
+        { time: inTime, value: baseX },
+        { time: duration, value: baseX },
+      ], baseX);
+      setKeyframes(layer, "positionY", [
+        { time: 0, value: baseY + offsetY },
+        { time: delay, value: baseY + offsetY },
+        { time: inTime, value: wantsBounce ? baseY - 8 : baseY },
+        { time: settleTime, value: baseY },
+        { time: duration, value: baseY },
+      ], baseY);
+      setKeyframes(layer, "opacity", [
+        { time: 0, value: lower.includes("flash") ? 35 : 0 },
+        { time: delay, value: lower.includes("flash") ? 35 : 0 },
+        { time: inTime, value: 100 },
+        { time: duration, value: 100 },
+      ], 100);
+      if (wantsScale) {
+        const startScale = selectedMotionEngine === "lottie" ? 96 : 92;
+        setKeyframes(layer, "scale", [
+          { time: 0, value: startScale },
+          { time: delay, value: startScale },
+          { time: inTime, value: wantsBounce ? 104 : 101 },
+          { time: settleTime, value: 100 },
+          { time: duration, value: 100 },
+        ], 100);
+      }
+      if (wantsRotate) {
+        const rotate = selectedMotionEngine === "three" ? (index % 2 === 0 ? -5 : 5) : (index % 2 === 0 ? -2 : 2);
+        setKeyframes(layer, "rotation", [
+          { time: 0, value: rotate },
+          { time: delay, value: rotate },
+          { time: inTime, value: 0 },
+          { time: duration, value: 0 },
+        ], 0);
+      }
+    });
+    motionForge.seek(0);
+    setStatus(`${engineLabel(selectedMotionEngine)} 已生成 ${targets.length} 个图层动效`);
+    importStatus.textContent = `动效已应用到：${targets.map((layer) => layer.name).slice(0, 2).join("、")}${targets.length > 2 ? "..." : ""}`;
+    selectedLayerId = targets[0].id;
+    selectedPropertyId = "positionY";
+    renderAll();
+  };
+  const engineLabel = (engine) => ({
+    three: "Three.js",
+    p5: "p5.js",
+    lottie: "Lottie",
+    css: "CSS Motion",
+  })[engine] || "Three.js";
 
   function selectLayerById(layerId, status = "") {
     const layer = getLayer(layerId);
@@ -246,6 +434,7 @@ export function createMotionEditor({ motionForge, canvas }) {
     renderTimeline();
     focusTimelineOnLayer(layer.id);
     renderFigmaLayers(Number(scrubber.value));
+    renderPromptTargets();
   }
 
   function groupSelectedTargets() {
@@ -633,6 +822,29 @@ export function createMotionEditor({ motionForge, canvas }) {
           event.stopPropagation();
           selectLayerById(layer.id, "已选中画布图层");
         });
+        element.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.stopPropagation();
+          selectLayerById(layer.id, "已选中画布图层");
+          if (layer.staticCanvas) return;
+          pushHistory();
+          if (layer.kind === "figma" && !layer.motionTarget) {
+            layer.motionTarget = true;
+            importStatus.textContent = "已勾选为动效目标";
+          }
+          activeCanvasDrag = {
+            layerId: layer.id,
+            element,
+            startClientX: event.clientX,
+            startClientY: event.clientY,
+            startX: getValue(layer.id, "positionX", Number(scrubber.value)),
+            startY: getValue(layer.id, "positionY", Number(scrubber.value)),
+          };
+          document.body.classList.add("canvas-layer-dragging");
+          element.classList.add("dragging-canvas-layer");
+          element.setPointerCapture?.(event.pointerId);
+        });
         element.addEventListener("keydown", (event) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
@@ -644,7 +856,7 @@ export function createMotionEditor({ motionForge, canvas }) {
         figmaStage.appendChild(element);
       }
 
-      element.className = `figma-layer ${layer.figma.type.toLowerCase()} ${hasImage ? "has-image" : ""} ${showContent ? "" : "ghost"} ${layer.id === selectedLayerId ? "selected" : ""}`;
+      element.className = `figma-layer ${layer.figma.type.toLowerCase()} ${hasImage ? "has-image" : ""} ${showContent ? "" : "ghost"} ${layer.id === selectedLayerId ? "selected" : ""} ${activeCanvasDrag?.layerId === layer.id ? "dragging-canvas-layer" : ""}`;
       element.setAttribute("aria-label", `选择 ${layer.name}`);
       element.style.cssText = style;
       figmaStage.appendChild(element);
@@ -686,6 +898,7 @@ export function createMotionEditor({ motionForge, canvas }) {
     renderProperties();
     renderTimeline();
     renderFigmaLayers(Number(scrubber.value));
+    renderPromptTargets();
     updatePreviewEmpty();
     updateCanvasGuide();
     updateActionAvailability();
@@ -790,12 +1003,18 @@ export function createMotionEditor({ motionForge, canvas }) {
   zoomControl.addEventListener("click", () => {
     zoomIndex = (zoomIndex + 1) % zoomOptions.length;
     const option = zoomOptions[zoomIndex];
-    motionForge.setPreviewZoom?.(option.value);
-    zoomControl.textContent = option.label;
-    setStatus(`预览缩放 ${option.label}`);
-    updateCanvasGuide();
-    renderFigmaLayers(Number(scrubber.value));
+    setPreviewZoom(option.value);
   });
+
+  composition.addEventListener("wheel", (event) => {
+    if (!event.shiftKey) return;
+    event.preventDefault();
+    zoomByWheel(event.deltaY);
+  }, { passive: false });
+
+  window.addEventListener("pointermove", updateDraggedLayerPosition);
+  window.addEventListener("pointerup", finishCanvasDrag);
+  window.addEventListener("pointercancel", finishCanvasDrag);
 
   qualityToggle.addEventListener("click", () => {
     previewQuality = previewQuality === "HQ" ? "Draft" : "HQ";
@@ -869,12 +1088,27 @@ export function createMotionEditor({ motionForge, canvas }) {
       return;
     }
 
+    if (activeMotionTargets().length) {
+      applyPromptMotionToTargets();
+      return;
+    }
+
     pushHistory();
     const result = motionForge.createMotionFromPrompt(motionBriefInput.value);
     briefStatus.textContent = result;
     selectedLayerId = motionForge.project.layers[0]?.id || "";
     selectedPropertyId = selectedLayerId ? Object.keys(getLayer(selectedLayerId).properties)[0] : "";
     renderAll();
+  });
+  app.querySelectorAll(".engine-option").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedMotionEngine = button.dataset.engine || "three";
+      app.querySelectorAll(".engine-option").forEach((option) => {
+        option.classList.toggle("selected", option === button);
+      });
+      engineStatus.textContent = engineLabel(selectedMotionEngine);
+      setStatus(`使用 ${engineLabel(selectedMotionEngine)} 生成动效`);
+    });
   });
   app.querySelector("#exportProject").addEventListener("click", () => copyProjectJson(app.querySelector("#selectedLayerName")));
   app.querySelector("#fetchFigma").addEventListener("click", fetchAndAnimateFigma);

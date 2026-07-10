@@ -583,7 +583,7 @@ function resizePreview() {
   const maxWidth = workspace?.clientWidth || window.innerWidth;
   const maxHeight = workspace?.clientHeight || window.innerHeight;
   const fitScale = Math.min(maxWidth / config.width, maxHeight / config.height);
-  const scale = previewZoom === "fit" ? fitScale : Number(previewZoom);
+  const scale = previewZoom === "fit" ? fitScale : Math.max(0.2, Math.min(5, Number(previewZoom) || 1));
   canvas.style.width = `${Math.floor(config.width * scale)}px`;
   canvas.style.height = `${Math.floor(config.height * scale)}px`;
   window.dispatchEvent(new CustomEvent("motionforge:resize-preview"));
@@ -677,7 +677,7 @@ window.motionForge = {
   importFigmaLayers,
   setMotionTarget,
   setPreviewZoom(value) {
-    previewZoom = value;
+    previewZoom = value === "fit" ? "fit" : Math.max(0.2, Math.min(5, Number(value) || 1));
     resizePreview();
     return previewZoom;
   },

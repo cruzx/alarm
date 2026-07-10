@@ -384,12 +384,47 @@ button:disabled {
 
 .prompt-bar {
   display: grid;
-  grid-template-columns: minmax(160px, 1fr) 122px auto;
+  grid-template-columns: minmax(128px, auto) minmax(160px, 1fr) 122px auto;
   align-items: center;
   gap: 8px;
   padding: 10px 20px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   background: #17191d;
+}
+
+.prompt-targets {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.target-chip {
+  max-width: 170px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  color: #9da5b7;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  box-shadow: none;
+}
+
+.target-chip.active {
+  color: #eaf2ff;
+  border-color: rgba(79, 140, 255, 0.78);
+  background: rgba(79, 140, 255, 0.32);
+}
+
+.target-chip.empty,
+.target-chip.more {
+  color: #8fa1b5;
 }
 
 .prompt-bar input {
@@ -422,8 +457,9 @@ button:disabled {
 .composition {
   display: grid;
   place-items: center;
-  overflow: hidden;
+  overflow: auto;
   min-height: 0;
+  padding: 24px;
   background:
     radial-gradient(circle at 50% 12%, rgba(86, 148, 255, 0.13), transparent 34%),
     #22262b;
@@ -496,8 +532,8 @@ button:disabled {
   position: relative;
   display: grid;
   place-items: center;
-  max-width: 100%;
-  max-height: 100%;
+  max-width: none;
+  max-height: none;
   border-radius: 18px;
   overflow: hidden;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.38);
@@ -544,8 +580,8 @@ button:disabled {
 
 #stage {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
+  max-width: none;
+  max-height: none;
   box-shadow: none;
 }
 
@@ -569,7 +605,14 @@ button:disabled {
   text-align: center;
   white-space: pre-wrap;
   overflow: hidden;
-  cursor: pointer;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+
+.figma-layer.dragging-canvas-layer,
+.canvas-layer-dragging .figma-layer.selected {
+  cursor: grabbing;
 }
 
 .figma-layer img {
@@ -647,6 +690,34 @@ button:disabled {
 .ai-preview-box span {
   max-width: 220px;
   font-size: 12px;
+}
+
+.engine-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.engine-options {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.engine-option {
+  height: 32px;
+  padding: 0 8px;
+  color: #b8c0ce;
+  font-size: 12px;
+}
+
+.engine-option.selected {
+  color: #ffffff;
+  border-color: rgba(79, 140, 255, 0.82);
+  background: rgba(79, 140, 255, 0.22);
 }
 
 .property-list {
