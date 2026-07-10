@@ -1,6 +1,6 @@
 # Motion Forge Editor
 
-AI-assisted motion editor for Figma-to-animation workflows. It provides a dark timeline workspace, Figma URL import, selectable layers, keyframes, undo/redo, Three.js preview, and export helpers for MP4 and Lottie companion JSON.
+AI-assisted motion editor for Figma-to-animation workflows. It provides a dark timeline workspace, Figma URL import, selectable layers, Figma-like grouped layer hierarchy, keyframes, undo/redo, Three.js preview, and export helpers for MP4 and Lottie companion JSON.
 
 ## Run Locally
 

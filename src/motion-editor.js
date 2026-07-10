@@ -40,15 +40,6 @@ export function createMotionEditor({ motionForge, canvas }) {
         <button id="deleteLayer" class="danger-action" type="button">删除图层</button>
       </div>
       <div class="layer-list"></div>
-      <div class="ai-box">
-        <div class="panel-head compact">
-          <strong>Selected Layer Motion</strong>
-          <span>preset</span>
-        </div>
-        <textarea id="aiPrompt" spellcheck="false">soft fade up with slight scale</textarea>
-        <button id="applyAi" type="button">按描述生成动效</button>
-        <p id="aiStatus">先勾选要做动效的图层</p>
-      </div>
     </aside>
     <section class="stage-panel">
       <div class="topbar">
@@ -170,7 +161,6 @@ export function createMotionEditor({ motionForge, canvas }) {
   const moveLayerDown = app.querySelector("#moveLayerDown");
   const deleteLayer = app.querySelector("#deleteLayer");
   const applyHomepageMotionButton = app.querySelector("#applyHomepageMotion");
-  const applyAiButton = app.querySelector("#applyAi");
 
   figmaUrlInput.value = TARGET_FIGMA_URL;
   motionBriefInput.value = "PC 首页进入动效：导航先出现，主视觉轻微上移淡入，卡片和内容模块错峰浮入，整体有轻微景深感";
@@ -336,15 +326,48 @@ export function createMotionEditor({ motionForge, canvas }) {
     return ["", "email", "number", "password", "search", "tel", "text", "url"].includes(target.type);
   }
 
+  function visibleProjectLayers() {
+    const layerByFigmaId = new Map(
+      motionForge.project.layers
+        .filter((layer) => layer.kind === "figma" && layer.figma?.nodeId)
+        .map((layer) => [layer.figma.nodeId, layer])
+    );
+    const isHiddenByCollapsedParent = (layer) => {
+      let parentId = layer.figma?.parentId || "";
+      while (parentId) {
+        const parent = layerByFigmaId.get(parentId);
+        if (!parent) return false;
+        if (parent.expanded === false) return true;
+        parentId = parent.figma?.parentId || "";
+      }
+      return false;
+    };
+    return motionForge.project.layers.filter((layer) => !isHiddenByCollapsedParent(layer));
+  }
+
+  function toggleLayerExpanded(layerId) {
+    const layer = getLayer(layerId);
+    if (!layer?.figma?.hasChildren) return;
+    pushHistory();
+    layer.expanded = layer.expanded === false;
+    importStatus.textContent = layer.expanded ? `已展开 ${layer.name}` : `已收起 ${layer.name}`;
+    if (!visibleProjectLayers().some((visibleLayer) => visibleLayer.id === selectedLayerId)) {
+      selectedLayerId = layer.id;
+      selectedPropertyId = Object.keys(layer.properties)[0] || "";
+    }
+    renderAll();
+  }
+
   function renderLayers() {
     if (!motionForge.project.layers.length) {
       layerList.innerHTML = `<div class="empty-state">No layers yet</div>`;
       return;
     }
 
-    layerList.innerHTML = motionForge.project.layers
+    layerList.innerHTML = visibleProjectLayers()
       .map((layer) => `
-        <div class="layer-row ${layer.id === selectedLayerId ? "selected" : ""} ${layer.staticCanvas ? "static-canvas" : ""}" data-layer="${layer.id}" role="button" tabindex="0" draggable="true">
+        <div class="layer-row ${layer.id === selectedLayerId ? "selected" : ""} ${layer.staticCanvas ? "static-canvas" : ""} ${layer.figma?.hasChildren ? "figma-parent-layer" : ""} ${layer.expanded === false ? "collapsed" : ""}" data-layer="${layer.id}" role="button" tabindex="0" draggable="true" style="--layer-depth:${Math.min(8, layer.figma?.depth || 0)}">
+          ${layer.figma?.hasChildren ? `<button class="expand-toggle" type="button" aria-label="${layer.expanded === false ? "展开" : "收起"} ${escapeHtml(layer.name)}" title="${layer.expanded === false ? "展开" : "收起"}"></button>` : `<span class="expand-spacer"></span>`}
           <label class="target-check" title="Motion target">
             <input type="checkbox" ${layer.motionTarget ? "checked" : ""} ${layer.staticCanvas ? "disabled" : ""} aria-label="Use ${escapeHtml(layer.name)} as motion target" />
           </label>
@@ -357,6 +380,11 @@ export function createMotionEditor({ motionForge, canvas }) {
 
     layerList.querySelectorAll(".layer-row").forEach((row) => {
       const checkbox = row.querySelector("input");
+      row.querySelector(".expand-toggle")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        toggleLayerExpanded(row.dataset.layer);
+      });
       row.querySelector(".target-check")?.addEventListener("click", (event) => {
         event.stopPropagation();
       });
@@ -480,7 +508,8 @@ export function createMotionEditor({ motionForge, canvas }) {
       return;
     }
 
-    timelineBody.innerHTML = motionForge.project.layers.map((layer) => {
+    const visibleLayers = visibleProjectLayers();
+    timelineBody.innerHTML = visibleLayers.map((layer) => {
       const tracks = Object.entries(layer.properties).map(([propertyId, property]) => `
         <div class="track ${layer.id === selectedLayerId && propertyId === selectedPropertyId ? "selected" : ""}" data-layer="${layer.id}" data-property="${propertyId}">
           <span>${property.label}</span>
@@ -671,7 +700,6 @@ export function createMotionEditor({ motionForge, canvas }) {
     selectDetailTargets.disabled = targetableLayers.length === 0;
     clearTargets.disabled = selectedTargets.length === 0;
     applyHomepageMotionButton.disabled = selectedTargets.length === 0;
-    applyAiButton.disabled = selectedTargets.length === 0;
     groupTargets.disabled = selectedTargets.length < 2;
     ungroupLayer.disabled = !selectedLayer?.groupName;
     moveLayerUp.disabled = selectedLayerIndex <= 0;
@@ -845,19 +873,6 @@ export function createMotionEditor({ motionForge, canvas }) {
     const result = motionForge.createMotionFromPrompt(motionBriefInput.value);
     briefStatus.textContent = result;
     selectedLayerId = motionForge.project.layers[0]?.id || "";
-    selectedPropertyId = selectedLayerId ? Object.keys(getLayer(selectedLayerId).properties)[0] : "";
-    renderAll();
-  });
-  app.querySelector("#applyAi").addEventListener("click", () => {
-    const targets = motionForge.project.layers.filter((layer) => layer.motionTarget);
-    if (!targets.length) {
-      app.querySelector("#aiStatus").textContent = "先在左侧勾选要动的图层";
-      return;
-    }
-    pushHistory();
-    const result = motionForge.applyHomepageMotion?.() || motionForge.applyAiDraft(app.querySelector("#aiPrompt").value);
-    app.querySelector("#aiStatus").textContent = result;
-    selectedLayerId = targets[0]?.id || selectedLayerId;
     selectedPropertyId = selectedLayerId ? Object.keys(getLayer(selectedLayerId).properties)[0] : "";
     renderAll();
   });
@@ -1058,14 +1073,19 @@ function figmaJsonToLayers(figmaJson, motionForge, options = {}) {
       characters: "",
       textColor: textColorFor(canvasFill),
       imageUrl: "",
-      hasChildren: false,
+      hasChildren: visiblePositionedChildren(target).length > 0,
+      childCount: visiblePositionedChildren(target).length,
+      parentId: "",
+      depth: 0,
+      groupPath: "",
       isCanvasSnapshot: true,
       previewVisible: true,
     },
     properties: transformProperties(canvasX, canvasY, motionForge),
   };
 
-  const childLayers = nodes.slice(0, 120).map((node, index) => {
+  const childLayers = nodes.slice(0, 180).map((entry, index) => {
+    const node = entry.node || entry;
     const box = node.absoluteBoundingBox;
     const width = Math.max(2, box.width * fitScale);
     const height = Math.max(2, box.height * fitScale);
@@ -1084,9 +1104,15 @@ function figmaJsonToLayers(figmaJson, motionForge, options = {}) {
       expanded: true,
       motionTarget: false,
       staticCanvas,
+      figmaParentId: entry.parentId || "",
+      figmaDepth: entry.depth || 0,
+      figmaChildCount: entry.childCount || 0,
       figma: {
         nodeId: node.id || id,
-        parentName: node.parentName || "",
+        parentName: entry.parentName || "",
+        parentId: entry.parentId || "",
+        depth: entry.depth || 0,
+        groupPath: entry.groupPath || "",
         type: node.type || "NODE",
         x,
         y,
@@ -1097,7 +1123,8 @@ function figmaJsonToLayers(figmaJson, motionForge, options = {}) {
         characters: node.characters || "",
         textColor: textColorFor(fill),
         imageUrl: "",
-        hasChildren: Boolean(node.children?.length),
+        hasChildren: Boolean(entry.childCount || node.children?.length),
+        childCount: entry.childCount || 0,
         isCanvasSnapshot: false,
         previewVisible: false,
       },
@@ -1139,31 +1166,63 @@ function findDefaultFrame(root) {
 
 function importableNodes(target) {
   const children = (target.children || []).filter((node) => node.visible !== false && node.absoluteBoundingBox);
-  if (children.length) {
-    const expanded = children.flatMap((child) => {
-      const nested = flattenRenderableNodes(child, child.name || target.name || "");
-      return nested.length ? nested : [child];
-    });
-    return expanded.length ? expanded : children;
+  if (!children.length) {
+    return target.absoluteBoundingBox ? [{
+      node: target,
+      parentId: "",
+      parentName: "",
+      depth: 0,
+      groupPath: "",
+      childCount: visiblePositionedChildren(target).length,
+    }] : [];
   }
-  return target.absoluteBoundingBox ? [target] : [];
+
+  return children.flatMap((child) => figmaTreeEntries(child, {
+    parentId: target.id || "",
+    parentName: target.name || "",
+    depth: 1,
+    groupPath: "",
+  }));
 }
 
 function hasRenderableChildren(node) {
   return (node.children || []).some((child) => child.visible !== false && child.absoluteBoundingBox);
 }
 
-function flattenRenderableNodes(node, parentName = "") {
+function figmaTreeEntries(node, context) {
   if (!node || node.visible === false || !node.absoluteBoundingBox) return [];
-  const children = (node.children || []).filter((child) => child.visible !== false && child.absoluteBoundingBox);
-  if (!children.length || isLeafRenderable(node)) {
-    return [{ ...node, parentName }];
-  }
+  const children = visiblePositionedChildren(node);
+  const isContainer = children.length > 0 && !isLeafRenderable(node);
+  const nodeId = node.id || `${context.parentId}-${node.name || node.type || "node"}`;
+  const isGroup = isFigmaGroupNode(node);
+  const groupPath = isGroup
+    ? [...(context.groupPath ? context.groupPath.split(" / ") : []), node.name || node.type || "Group"].join(" / ")
+    : context.groupPath;
+  const entry = {
+    node,
+    parentId: context.parentId,
+    parentName: context.parentName,
+    depth: context.depth,
+    groupPath,
+    childCount: children.length,
+  };
+  const nested = children.flatMap((child) => figmaTreeEntries(child, {
+    parentId: nodeId,
+    parentName: node.name || context.parentName,
+    depth: context.depth + 1,
+    groupPath,
+  }));
 
-  const nested = children.flatMap((child) => flattenRenderableNodes(child, node.name || parentName));
-  if (hasVisiblePaint(node)) return [{ ...node, parentName }, ...nested];
-  if (nested.length) return nested;
-  return [{ ...node, parentName }];
+  if (isContainer || hasVisiblePaint(node) || !nested.length) return [entry, ...nested];
+  return nested;
+}
+
+function visiblePositionedChildren(node) {
+  return (node.children || []).filter((child) => child.visible !== false && child.absoluteBoundingBox);
+}
+
+function isFigmaGroupNode(node) {
+  return ["FRAME", "GROUP", "COMPONENT", "COMPONENT_SET", "INSTANCE", "SECTION"].includes(node.type);
 }
 
 function isLeafRenderable(node) {

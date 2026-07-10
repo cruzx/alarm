@@ -90,8 +90,7 @@ button:disabled {
 }
 
 .panel-head span,
-.topbar span,
-#aiStatus {
+.topbar span {
   color: #9da5b7;
   font-size: 12px;
 }
@@ -111,16 +110,34 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
+  overscroll-behavior: contain;
+}
+
+.layer-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.layer-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(143, 161, 181, 0.28);
+}
+
+.layer-list::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .layer-row {
   display: grid;
-  grid-template-columns: 18px 10px 1fr auto;
+  grid-template-columns: 16px 18px 10px 1fr auto;
   align-items: center;
-  gap: 9px;
+  gap: 7px;
   width: 100%;
   height: 36px;
-  padding: 0 10px;
+  padding: 0 10px 0 calc(10px + var(--layer-depth, 0) * 14px);
   border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 12px;
   color: #f5f7fa;
@@ -144,6 +161,44 @@ button:disabled {
 
 .layer-row.static-canvas {
   opacity: 0.72;
+}
+
+.layer-row.figma-parent-layer {
+  background: rgba(79, 140, 255, 0.08);
+  border-color: rgba(79, 140, 255, 0.18);
+}
+
+.expand-toggle,
+.expand-spacer {
+  width: 16px;
+  height: 22px;
+}
+
+.expand-toggle {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.expand-toggle::before {
+  content: "";
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid #8fa1b5;
+  transition: transform 140ms ease, border-top-color 140ms ease;
+}
+
+.expand-toggle:hover::before {
+  border-top-color: #f5f7fa;
+}
+
+.layer-row.collapsed .expand-toggle::before {
+  transform: rotate(-90deg);
 }
 
 .target-check {
@@ -230,14 +285,6 @@ button:disabled {
   place-items: center;
 }
 
-.ai-box {
-  margin-top: auto;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.045);
-}
-
 .import-status {
   color: #8fa1b5;
   font-size: 12px;
@@ -289,18 +336,6 @@ button:disabled {
   min-height: 18px;
 }
 
-.ai-box textarea {
-  width: 100%;
-  height: 96px;
-  resize: none;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 12px;
-  color: #f3f6f8;
-  background: rgba(0, 0, 0, 0.28);
-  padding: 9px;
-}
-
-.ai-box button,
 #exportProject {
   width: 100%;
   height: 34px;
@@ -368,8 +403,7 @@ button:disabled {
 }
 
 .prompt-bar input:focus,
-.figma-url-import input:focus,
-.ai-box textarea:focus {
+.figma-url-import input:focus {
   border-color: #f2c45a;
   outline: none;
 }
