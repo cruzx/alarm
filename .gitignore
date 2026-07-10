@@ -1,8 +1,4 @@
+node_modules
+dist
+exports
 .DS_Store
-xcuserdata/
-DerivedData/
-build/
-*.xcuserstate
-*.moved-aside
-*.xccheckout
-*.xcscmblueprint
