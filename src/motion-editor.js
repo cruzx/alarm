@@ -151,6 +151,11 @@ export function createMotionEditor({ motionForge, canvas }) {
   let previewQuality = "HQ";
   let currentZoom = "fit";
   let activeCanvasDrag = null;
+  let activeCanvasPan = null;
+  let spacePanKeyActive = false;
+  let suppressCanvasClick = false;
+  let canvasPanX = 0;
+  let canvasPanY = 0;
   let zoomIndex = 0;
   const zoomOptions = [
     { label: "Fit", value: "fit" },
@@ -285,6 +290,10 @@ export function createMotionEditor({ motionForge, canvas }) {
     const factor = direction > 0 ? 1.1 : 1 / 1.1;
     setPreviewZoom(Math.max(0.2, Math.min(5, baseZoom * factor)), "画布缩放");
   };
+  const applyCanvasPan = () => {
+    previewFrame.style.setProperty("--canvas-pan-x", `${canvasPanX}px`);
+    previewFrame.style.setProperty("--canvas-pan-y", `${canvasPanY}px`);
+  };
   const updateDraggedLayerPosition = (event) => {
     if (!activeCanvasDrag) return;
     const scale = previewFrame.clientWidth / motionForge.width || 1;
@@ -322,6 +331,42 @@ export function createMotionEditor({ motionForge, canvas }) {
     setStatus("图层位置已更新");
     renderLayers();
     updateActionAvailability();
+  };
+  const startCanvasPan = (event) => {
+    if (!spacePanKeyActive || activeCanvasDrag || event.button !== 0) return;
+    event.preventDefault();
+    suppressCanvasClick = Boolean(event.target?.closest?.(".figma-layer"));
+    activeCanvasPan = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startPanX: canvasPanX,
+      startPanY: canvasPanY,
+      moved: false,
+    };
+    document.body.classList.add("canvas-pan-dragging");
+    composition.setPointerCapture?.(event.pointerId);
+  };
+  const updateCanvasPan = (event) => {
+    if (!activeCanvasPan) return;
+    const dx = event.clientX - activeCanvasPan.startClientX;
+    const dy = event.clientY - activeCanvasPan.startClientY;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) activeCanvasPan.moved = true;
+    canvasPanX = activeCanvasPan.startPanX + dx;
+    canvasPanY = activeCanvasPan.startPanY + dy;
+    applyCanvasPan();
+  };
+  const finishCanvasPan = () => {
+    if (!activeCanvasPan) return;
+    suppressCanvasClick = suppressCanvasClick || activeCanvasPan.moved;
+    activeCanvasPan = null;
+    document.body.classList.remove("canvas-pan-dragging");
+  };
+  const setSpacePanKey = (isActive) => {
+    if (isActive && activeCanvasDrag) return;
+    spacePanKeyActive = isActive;
+    document.body.classList.toggle("space-pan-ready", isActive);
+    if (!isActive) finishCanvasPan();
   };
   const activeMotionTargets = () => {
     const selected = getLayer(selectedLayerId);
@@ -846,11 +891,18 @@ export function createMotionEditor({ motionForge, canvas }) {
         element.role = "button";
         element.tabIndex = 0;
         element.addEventListener("click", (event) => {
+          if (suppressCanvasClick) {
+            suppressCanvasClick = false;
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+          }
           event.stopPropagation();
           selectLayerById(layer.id, "已选中画布图层");
         });
         element.addEventListener("pointerdown", (event) => {
           if (event.button !== 0) return;
+          if (spacePanKeyActive) return;
           event.preventDefault();
           event.stopPropagation();
           selectLayerById(layer.id, "已选中画布图层");
@@ -1038,10 +1090,20 @@ export function createMotionEditor({ motionForge, canvas }) {
     event.preventDefault();
     zoomByWheel(event.deltaY);
   }, { passive: false });
+  composition.addEventListener("pointerdown", startCanvasPan);
 
-  window.addEventListener("pointermove", updateDraggedLayerPosition);
-  window.addEventListener("pointerup", finishCanvasDrag);
-  window.addEventListener("pointercancel", finishCanvasDrag);
+  window.addEventListener("pointermove", (event) => {
+    updateDraggedLayerPosition(event);
+    updateCanvasPan(event);
+  });
+  window.addEventListener("pointerup", () => {
+    finishCanvasDrag();
+    finishCanvasPan();
+  });
+  window.addEventListener("pointercancel", () => {
+    finishCanvasDrag();
+    finishCanvasPan();
+  });
 
   qualityToggle.addEventListener("click", () => {
     previewQuality = previewQuality === "HQ" ? "Draft" : "HQ";
@@ -1184,9 +1246,15 @@ export function createMotionEditor({ motionForge, canvas }) {
     updateCanvasGuide();
     renderFigmaLayers(Number(scrubber.value));
   });
-  window.addEventListener("keydown", (event) => {
+  const handleEditorKeyDown = (event) => {
     const key = event.key.toLowerCase();
     const commandKey = event.metaKey || event.ctrlKey;
+    if (event.code === "Space" && !event.repeat && !isEditableEventTarget(event.target)) {
+      event.preventDefault();
+      event.stopPropagation();
+      setSpacePanKey(true);
+      return;
+    }
     if (commandKey && (key === "z" || key === "y") && !isTextEntryEventTarget(event.target)) {
       event.preventDefault();
       if (key === "y" || event.shiftKey) {
@@ -1201,7 +1269,12 @@ export function createMotionEditor({ motionForge, canvas }) {
       event.preventDefault();
       deleteSelectedLayer();
     }
-  });
+  };
+  window.addEventListener("keydown", handleEditorKeyDown, true);
+  window.addEventListener("keyup", (event) => {
+    if (event.code === "Space") setSpacePanKey(false);
+  }, true);
+  window.addEventListener("blur", () => setSpacePanKey(false));
   renderAll();
   if (storedFigmaToken && TARGET_FIGMA_URL && !motionForge.project.layers.length) {
     window.setTimeout(() => {
