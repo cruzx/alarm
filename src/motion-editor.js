@@ -529,6 +529,19 @@ export function createMotionEditor({ motionForge, canvas }) {
     renderAll();
   }
 
+  function isEditableEventTarget(target) {
+    return target instanceof HTMLInputElement ||
+      target instanceof HTMLTextAreaElement ||
+      target instanceof HTMLSelectElement ||
+      target?.isContentEditable;
+  }
+
+  function isTextEntryEventTarget(target) {
+    if (target instanceof HTMLTextAreaElement || target?.isContentEditable) return true;
+    if (!(target instanceof HTMLInputElement)) return false;
+    return ["", "email", "number", "password", "search", "tel", "text", "url"].includes(target.type);
+  }
+
   function visibleProjectLayers() {
     const layerByFigmaId = new Map(
       motionForge.project.layers
@@ -1170,6 +1183,24 @@ export function createMotionEditor({ motionForge, canvas }) {
   window.addEventListener("motionforge:resize-preview", () => {
     updateCanvasGuide();
     renderFigmaLayers(Number(scrubber.value));
+  });
+  window.addEventListener("keydown", (event) => {
+    const key = event.key.toLowerCase();
+    const commandKey = event.metaKey || event.ctrlKey;
+    if (commandKey && (key === "z" || key === "y") && !isTextEntryEventTarget(event.target)) {
+      event.preventDefault();
+      if (key === "y" || event.shiftKey) {
+        redo();
+      } else {
+        undo();
+      }
+      return;
+    }
+    if (isEditableEventTarget(event.target)) return;
+    if ((event.key === "Delete" || event.key === "Backspace") && selectedLayerId) {
+      event.preventDefault();
+      deleteSelectedLayer();
+    }
   });
   renderAll();
   if (storedFigmaToken && TARGET_FIGMA_URL && !motionForge.project.layers.length) {
