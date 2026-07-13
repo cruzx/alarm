@@ -505,15 +505,16 @@ export function createMotionEditor({ motionForge, canvas }) {
     css: "CSS",
   })[engine] || "Three.js";
 
-  function selectLayerById(layerId, status = "") {
+  function selectLayerById(layerId, status = "", propertyId = "") {
     const layer = getLayer(layerId);
     if (!layer) return;
     selectedLayerId = layer.id;
-    selectedPropertyId = Object.keys(layer.properties)[0] || "";
+    selectedPropertyId = propertyId && layer.properties[propertyId] ? propertyId : (Object.keys(layer.properties)[0] || "");
     if (status) setStatus(status);
     renderLayers();
     renderProperties();
     renderTimeline();
+    focusLayerListOnLayer(layer.id);
     focusTimelineOnLayer(layer.id);
     renderFigmaLayers(Number(scrubber.value));
     renderPromptTargets();
@@ -796,9 +797,7 @@ export function createMotionEditor({ motionForge, canvas }) {
 
     timelineBody.querySelectorAll(".track").forEach((track) => {
       track.addEventListener("click", () => {
-        selectedLayerId = track.dataset.layer;
-        selectedPropertyId = track.dataset.property;
-        renderAll();
+        selectLayerById(track.dataset.layer, "已选中时间轴图层", track.dataset.property);
       });
     });
 
@@ -816,6 +815,18 @@ export function createMotionEditor({ motionForge, canvas }) {
   function updateTimelinePlayhead(seconds) {
     const percent = `${(Math.max(0, Math.min(motionForge.duration, seconds)) / motionForge.duration) * 100}%`;
     timelineBody.style.setProperty("--playhead", percent);
+  }
+
+  function focusLayerListOnLayer(layerId) {
+    const row = layerList.querySelector(`.layer-row[data-layer="${CSS.escape(layerId)}"]`);
+    if (!row) return;
+    row.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+      behavior: "smooth",
+    });
+    row.classList.add("focus-pulse");
+    window.setTimeout(() => row.classList.remove("focus-pulse"), 650);
   }
 
   function focusTimelineOnLayer(layerId) {

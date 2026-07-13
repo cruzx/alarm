@@ -150,6 +150,16 @@ button:disabled {
   border-color: #f2c45a;
 }
 
+.layer-row.selected {
+  border-color: rgba(86, 148, 255, 0.96) !important;
+  background: rgba(63, 130, 255, 0.24) !important;
+  box-shadow: inset 3px 0 #4f8cff, 0 0 0 1px rgba(79, 140, 255, 0.18);
+}
+
+.layer-row.focus-pulse {
+  box-shadow: inset 3px 0 #4f8cff, 0 0 0 2px rgba(79, 140, 255, 0.72), 0 0 24px rgba(79, 140, 255, 0.24);
+}
+
 .layer-row.dragging {
   opacity: 0.45;
 }
@@ -465,7 +475,8 @@ button:disabled {
     #22262b;
 }
 
-.space-pan-ready .composition {
+.space-pan-ready .composition,
+.space-pan-ready .figma-layer {
   cursor: grab;
 }
 
@@ -616,7 +627,7 @@ button:disabled {
   text-align: center;
   white-space: pre-wrap;
   overflow: hidden;
-  cursor: grab;
+  cursor: default;
   user-select: none;
   touch-action: none;
 }
@@ -833,7 +844,8 @@ button:disabled {
 }
 
 .track-group.selected-layer {
-  background: rgba(79, 140, 255, 0.08);
+  background: rgba(79, 140, 255, 0.12);
+  box-shadow: inset 3px 0 rgba(79, 140, 255, 0.95);
 }
 
 .track-group.focus-pulse {
