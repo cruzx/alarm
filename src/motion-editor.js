@@ -10,6 +10,10 @@ export function createMotionEditor({ motionForge, canvas }) {
     next: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 6 9 6-9 6z"/><path d="M5 5h2v14H5z"/></svg>`,
     last: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M16 5h2v14h-2z"/><path d="m5 6 9 6-9 6z"/></svg>`,
   };
+  const visibilityIcons = {
+    visible: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5c5 0 8.5 4.4 9.6 6.2.3.5.3 1.1 0 1.6C20.5 14.6 17 19 12 19s-8.5-4.4-9.6-6.2a1.5 1.5 0 0 1 0-1.6C3.5 9.4 7 5 12 5Zm0 2C8.2 7 5.4 10.2 4.3 12 5.4 13.8 8.2 17 12 17s6.6-3.2 7.7-5C18.6 10.2 15.8 7 12 7Zm0 2.2a2.8 2.8 0 1 1 0 5.6 2.8 2.8 0 0 1 0-5.6Z"/></svg>`,
+    hidden: `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4.5 3.3 16.2 16.2-1.4 1.4-3-3A10.5 10.5 0 0 1 12 19c-5 0-8.5-4.4-9.6-6.2a1.5 1.5 0 0 1 0-1.6A18.4 18.4 0 0 1 6 7.1L3.1 4.7l1.4-1.4Zm3 5.3A16.4 16.4 0 0 0 4.3 12C5.4 13.8 8.2 17 12 17c1 0 2-.2 2.8-.6l-2-2a2.8 2.8 0 0 1-3.2-3.2l-2-2Zm4.5-3.6c5 0 8.5 4.4 9.6 6.2.3.5.3 1.1 0 1.6a17.3 17.3 0 0 1-2.1 2.8L17.9 14c.7-.7 1.3-1.4 1.8-2C18.6 10.2 15.8 7 12 7c-.6 0-1.2.1-1.7.2L8.8 5.7c1-.4 2.1-.7 3.2-.7Z"/></svg>`,
+  };
   const app = document.createElement("main");
   app.className = "motion-forge-editor";
   app.innerHTML = `
@@ -638,8 +642,9 @@ export function createMotionEditor({ motionForge, canvas }) {
 
     layerList.innerHTML = visibleProjectLayers()
       .map((layer) => `
-        <div class="layer-row ${layer.id === selectedLayerId ? "selected" : ""} ${layer.staticCanvas ? "static-canvas" : ""} ${layer.figma?.hasChildren ? "figma-parent-layer" : ""} ${layer.expanded === false ? "collapsed" : ""}" data-layer="${layer.id}" role="button" tabindex="0" draggable="true" style="--layer-depth:${Math.min(8, layer.figma?.depth || 0)}">
+        <div class="layer-row ${layer.id === selectedLayerId ? "selected" : ""} ${layer.hidden ? "hidden-layer" : ""} ${layer.staticCanvas ? "static-canvas" : ""} ${layer.figma?.hasChildren ? "figma-parent-layer" : ""} ${layer.expanded === false ? "collapsed" : ""}" data-layer="${layer.id}" role="button" tabindex="0" draggable="true" style="--layer-depth:${Math.min(8, layer.figma?.depth || 0)}">
           ${layer.figma?.hasChildren ? `<button class="expand-toggle" type="button" aria-label="${layer.expanded === false ? "展开" : "收起"} ${escapeHtml(layer.name)}" title="${layer.expanded === false ? "展开" : "收起"}"></button>` : `<span class="expand-spacer"></span>`}
+          <button class="visibility-toggle" type="button" aria-label="${layer.hidden ? "显示" : "隐藏"} ${escapeHtml(layer.name)}" title="${layer.hidden ? "显示图层" : "隐藏图层"}">${layer.hidden ? visibilityIcons.hidden : visibilityIcons.visible}</button>
           <label class="target-check" title="Motion target">
             <input type="checkbox" ${layer.motionTarget ? "checked" : ""} ${layer.staticCanvas ? "disabled" : ""} aria-label="Use ${escapeHtml(layer.name)} as motion target" />
           </label>
@@ -652,6 +657,16 @@ export function createMotionEditor({ motionForge, canvas }) {
 
     layerList.querySelectorAll(".layer-row").forEach((row) => {
       const checkbox = row.querySelector("input");
+      row.querySelector(".visibility-toggle")?.addEventListener("click", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const layer = getLayer(row.dataset.layer);
+        if (!layer) return;
+        pushHistory();
+        motionForge.setLayerVisible?.(layer.id, Boolean(layer.hidden));
+        importStatus.textContent = layer.hidden ? `已隐藏 ${layer.name}` : `已显示 ${layer.name}`;
+        renderAll();
+      });
       row.querySelector(".expand-toggle")?.addEventListener("click", (event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -912,7 +927,7 @@ export function createMotionEditor({ motionForge, canvas }) {
   }
 
   function renderFigmaLayers(seconds) {
-    const figmaLayers = motionForge.project.layers.filter((layer) => layer.kind === "figma");
+    const figmaLayers = motionForge.project.layers.filter((layer) => layer.kind === "figma" && !layer.hidden);
     const scale = previewFrame.clientWidth / motionForge.width || 1;
     const visibleLayerIds = new Set(figmaLayers.map((layer) => layer.id));
 

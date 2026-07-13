@@ -340,6 +340,14 @@ function setMotionTarget(layerId, enabled) {
   layer.motionTarget = Boolean(enabled);
 }
 
+function setLayerVisible(layerId, visible) {
+  const layer = project.layers.find((item) => item.id === layerId);
+  if (!layer) return;
+  layer.hidden = !visible;
+  renderAt(currentTime);
+  window.motionForge?.emitTime(currentTime);
+}
+
 function replaceGeneratedLayers(layers) {
   const figmaLayers = project.layers.filter((layer) => layer.kind === "figma");
   project.layers.splice(0, project.layers.length, ...layers, ...figmaLayers);
@@ -619,7 +627,7 @@ function setCanvasSize(width, height) {
 
 function renderCaptureFigmaLayers(seconds) {
   if (!captureFigmaStage) return;
-  const figmaLayers = project.layers.filter((layer) => layer.kind === "figma");
+  const figmaLayers = project.layers.filter((layer) => layer.kind === "figma" && !layer.hidden);
   captureFigmaStage.innerHTML = figmaLayers.map((layer) => {
     const x = timelineValue(layer.id, "positionX", seconds);
     const y = timelineValue(layer.id, "positionY", seconds);
@@ -676,6 +684,7 @@ window.motionForge = {
   setKeyframe,
   importFigmaLayers,
   setMotionTarget,
+  setLayerVisible,
   setPreviewZoom(value) {
     previewZoom = value === "fit" ? "fit" : Math.max(0.2, Math.min(5, Number(value) || 1));
     resizePreview();

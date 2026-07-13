@@ -132,7 +132,7 @@ button:disabled {
 
 .layer-row {
   display: grid;
-  grid-template-columns: 16px 18px 10px 1fr auto;
+  grid-template-columns: 16px 22px 18px 10px 1fr auto;
   align-items: center;
   gap: 7px;
   width: 100%;
@@ -171,6 +171,10 @@ button:disabled {
 
 .layer-row.static-canvas {
   opacity: 0.72;
+}
+
+.layer-row.hidden-layer {
+  opacity: 0.46;
 }
 
 .layer-row.figma-parent-layer {
@@ -228,6 +232,28 @@ button:disabled {
 
 .target-check input:disabled {
   cursor: not-allowed;
+}
+
+.visibility-toggle {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  color: #8fa1b5;
+  background: transparent;
+  cursor: pointer;
+}
+
+.visibility-toggle:hover {
+  color: #f5f7fa;
+}
+
+.visibility-toggle svg {
+  width: 15px;
+  height: 15px;
+  fill: currentColor;
 }
 
 .layer-row span {
