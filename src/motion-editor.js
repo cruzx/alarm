@@ -841,6 +841,45 @@ export function createMotionEditor({ motionForge, canvas }) {
     window.setTimeout(() => group.classList.remove("focus-pulse"), 650);
   }
 
+  function pickLayerAtPoint(clientX, clientY) {
+    const frameBox = previewFrame.getBoundingClientRect();
+    const scale = previewFrame.clientWidth / motionForge.width || 1;
+    const localX = clientX - frameBox.left;
+    const localY = clientY - frameBox.top;
+    const seconds = Number(scrubber.value);
+    return motionForge.project.layers
+      .map((layer, index) => ({ layer, index }))
+      .filter(({ layer }) => layer.kind === "figma")
+      .map(({ layer, index }) => {
+        const layerScale = (getValue(layer.id, "scale", seconds) || 100) / 100;
+        const width = Math.max(1, (layer.figma?.width || 0) * scale * layerScale);
+        const height = Math.max(1, (layer.figma?.height || 0) * scale * layerScale);
+        const centerX = getValue(layer.id, "positionX", seconds) * scale;
+        const centerY = getValue(layer.id, "positionY", seconds) * scale;
+        const left = centerX - width / 2;
+        const top = centerY - height / 2;
+        const hit = localX >= left && localX <= left + width && localY >= top && localY <= top + height;
+        return { layer, index, hit, area: width * height };
+      })
+      .filter((candidate) => candidate.hit)
+      .sort((a, b) => {
+        if (a.layer.staticCanvas !== b.layer.staticCanvas) return a.layer.staticCanvas ? 1 : -1;
+        if (a.layer.figma?.isCanvasSnapshot !== b.layer.figma?.isCanvasSnapshot) return a.layer.figma?.isCanvasSnapshot ? 1 : -1;
+        const depthDelta = (b.layer.figma?.depth || 0) - (a.layer.figma?.depth || 0);
+        if (depthDelta) return depthDelta;
+        const areaDelta = a.area - b.area;
+        if (areaDelta) return areaDelta;
+        return b.index - a.index;
+      })[0]?.layer || null;
+  }
+
+  function selectPiercedLayerAtPoint(event) {
+    const layer = pickLayerAtPoint(event.clientX, event.clientY);
+    if (!layer) return false;
+    selectLayerById(layer.id, "已穿透选中图层");
+    return true;
+  }
+
   function downloadTextFile(filename, text, type = "application/json") {
     const blob = new Blob([text], { type });
     const url = URL.createObjectURL(blob);
@@ -918,12 +957,24 @@ export function createMotionEditor({ motionForge, canvas }) {
             event.stopPropagation();
             return;
           }
+          if (event.metaKey || event.ctrlKey) {
+            event.preventDefault();
+            event.stopPropagation();
+            selectPiercedLayerAtPoint(event);
+            return;
+          }
           event.stopPropagation();
           selectLayerById(layer.id, "已选中画布图层");
         });
         element.addEventListener("pointerdown", (event) => {
           if (event.button !== 0) return;
           if (spacePanKeyActive) return;
+          if (event.metaKey || event.ctrlKey) {
+            event.preventDefault();
+            event.stopPropagation();
+            selectPiercedLayerAtPoint(event);
+            return;
+          }
           event.preventDefault();
           event.stopPropagation();
           selectLayerById(layer.id, "已选中画布图层");
