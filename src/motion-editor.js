@@ -88,14 +88,24 @@ export function createMotionEditor({ motionForge, canvas }) {
       </div>
       <div class="engine-panel">
         <div class="panel-head compact">
-          <strong>Motion Engine</strong>
-          <span id="engineStatus">Three.js</span>
+          <strong>动效生成方式</strong>
+          <span id="motionModeStatus">入场</span>
         </div>
-        <div class="engine-options" role="radiogroup" aria-label="Motion engine">
-          <button class="engine-option selected" data-engine="three" type="button">Three.js</button>
-          <button class="engine-option" data-engine="p5" type="button">p5.js</button>
-          <button class="engine-option" data-engine="lottie" type="button">Lottie</button>
-          <button class="engine-option" data-engine="css" type="button">CSS Motion</button>
+        <div class="engine-options" role="radiogroup" aria-label="Motion style">
+          <button class="engine-option selected" data-motion-mode="entrance" type="button">入场</button>
+          <button class="engine-option" data-motion-mode="physics" type="button">弹性</button>
+          <button class="engine-option" data-motion-mode="depth" type="button">景深</button>
+          <button class="engine-option" data-motion-mode="loop" type="button">循环</button>
+        </div>
+        <div class="panel-head compact subhead">
+          <strong>输出 / 运行目标</strong>
+          <span id="runtimeStatus">Three.js</span>
+        </div>
+        <div class="engine-options" role="radiogroup" aria-label="Runtime target">
+          <button class="engine-option selected" data-runtime-target="three" type="button">Three.js</button>
+          <button class="engine-option" data-runtime-target="p5" type="button">p5.js</button>
+          <button class="engine-option" data-runtime-target="lottie" type="button">Lottie</button>
+          <button class="engine-option" data-runtime-target="css" type="button">CSS</button>
         </div>
       </div>
       <div class="property-list"></div>
@@ -167,7 +177,8 @@ export function createMotionEditor({ motionForge, canvas }) {
   const figmaUrlInput = app.querySelector("#figmaUrl");
   const motionBriefInput = app.querySelector("#motionBrief");
   const promptTargets = app.querySelector("#promptTargets");
-  const engineStatus = app.querySelector("#engineStatus");
+  const motionModeStatus = app.querySelector("#motionModeStatus");
+  const runtimeStatus = app.querySelector("#runtimeStatus");
   const zoomControl = app.querySelector("#zoomControl");
   const qualityToggle = app.querySelector("#qualityToggle");
   const canvasWidthInput = app.querySelector("#canvasWidth");
@@ -181,7 +192,8 @@ export function createMotionEditor({ motionForge, canvas }) {
   const moveLayerDown = app.querySelector("#moveLayerDown");
   const deleteLayer = app.querySelector("#deleteLayer");
   const applyHomepageMotionButton = app.querySelector("#applyHomepageMotion");
-  let selectedMotionEngine = "three";
+  let selectedMotionMode = "entrance";
+  let selectedRuntimeTarget = "three";
 
   figmaUrlInput.value = TARGET_FIGMA_URL;
   motionBriefInput.value = "PC 首页进入动效：导航先出现，主视觉轻微上移淡入，卡片和内容模块错峰浮入，整体有轻微景深感";
@@ -354,9 +366,10 @@ export function createMotionEditor({ motionForge, canvas }) {
     const wantsDown = prompt.includes("下") || lower.includes("down");
     const wantsLeft = prompt.includes("左") || lower.includes("left");
     const wantsRight = prompt.includes("右") || lower.includes("right");
-    const wantsRotate = prompt.includes("旋转") || lower.includes("rotate") || selectedMotionEngine === "three";
-    const wantsBounce = prompt.includes("弹") || lower.includes("bounce") || selectedMotionEngine === "p5";
-    const wantsDepth = prompt.includes("景深") || lower.includes("depth") || selectedMotionEngine === "three";
+    const wantsRotate = prompt.includes("旋转") || lower.includes("rotate") || selectedMotionMode === "depth";
+    const wantsBounce = prompt.includes("弹") || lower.includes("bounce") || selectedMotionMode === "physics";
+    const wantsDepth = prompt.includes("景深") || lower.includes("depth") || selectedMotionMode === "depth";
+    const wantsLoop = prompt.includes("循环") || lower.includes("loop") || selectedMotionMode === "loop";
     const wantsScale = prompt.includes("放大") || prompt.includes("缩放") || lower.includes("scale") || wantsDepth;
     const offsetY = wantsDown ? -44 : 44;
     const offsetX = wantsLeft ? 40 : (wantsRight ? -40 : 0);
@@ -390,7 +403,7 @@ export function createMotionEditor({ motionForge, canvas }) {
         { time: duration, value: 100 },
       ], 100);
       if (wantsScale) {
-        const startScale = selectedMotionEngine === "lottie" ? 96 : 92;
+        const startScale = selectedRuntimeTarget === "lottie" ? 96 : 92;
         setKeyframes(layer, "scale", [
           { time: 0, value: startScale },
           { time: delay, value: startScale },
@@ -400,7 +413,7 @@ export function createMotionEditor({ motionForge, canvas }) {
         ], 100);
       }
       if (wantsRotate) {
-        const rotate = selectedMotionEngine === "three" ? (index % 2 === 0 ? -5 : 5) : (index % 2 === 0 ? -2 : 2);
+        const rotate = selectedRuntimeTarget === "three" ? (index % 2 === 0 ? -5 : 5) : (index % 2 === 0 ? -2 : 2);
         setKeyframes(layer, "rotation", [
           { time: 0, value: rotate },
           { time: delay, value: rotate },
@@ -408,19 +421,33 @@ export function createMotionEditor({ motionForge, canvas }) {
           { time: duration, value: 0 },
         ], 0);
       }
+      if (wantsLoop) {
+        setKeyframes(layer, "opacity", [
+          { time: 0, value: 72 },
+          { time: duration * 0.35, value: 100 },
+          { time: duration * 0.7, value: 72 },
+          { time: duration, value: 72 },
+        ], 72);
+      }
     });
     motionForge.seek(0);
-    setStatus(`${engineLabel(selectedMotionEngine)} 已生成 ${targets.length} 个图层动效`);
+    setStatus(`${motionModeLabel(selectedMotionMode)} · ${runtimeLabel(selectedRuntimeTarget)} 已生成 ${targets.length} 个图层动效`);
     importStatus.textContent = `动效已应用到：${targets.map((layer) => layer.name).slice(0, 2).join("、")}${targets.length > 2 ? "..." : ""}`;
     selectedLayerId = targets[0].id;
     selectedPropertyId = "positionY";
     renderAll();
   };
-  const engineLabel = (engine) => ({
+  const motionModeLabel = (mode) => ({
+    entrance: "入场动效",
+    physics: "弹性动效",
+    depth: "景深动效",
+    loop: "循环动效",
+  })[mode] || "入场动效";
+  const runtimeLabel = (engine) => ({
     three: "Three.js",
     p5: "p5.js",
     lottie: "Lottie",
-    css: "CSS Motion",
+    css: "CSS",
   })[engine] || "Three.js";
 
   function selectLayerById(layerId, status = "") {
@@ -1100,14 +1127,24 @@ export function createMotionEditor({ motionForge, canvas }) {
     selectedPropertyId = selectedLayerId ? Object.keys(getLayer(selectedLayerId).properties)[0] : "";
     renderAll();
   });
-  app.querySelectorAll(".engine-option").forEach((button) => {
+  app.querySelectorAll("[data-motion-mode]").forEach((button) => {
     button.addEventListener("click", () => {
-      selectedMotionEngine = button.dataset.engine || "three";
-      app.querySelectorAll(".engine-option").forEach((option) => {
+      selectedMotionMode = button.dataset.motionMode || "entrance";
+      app.querySelectorAll("[data-motion-mode]").forEach((option) => {
         option.classList.toggle("selected", option === button);
       });
-      engineStatus.textContent = engineLabel(selectedMotionEngine);
-      setStatus(`使用 ${engineLabel(selectedMotionEngine)} 生成动效`);
+      motionModeStatus.textContent = motionModeLabel(selectedMotionMode).replace("动效", "");
+      setStatus(`使用 ${motionModeLabel(selectedMotionMode)} 生成`);
+    });
+  });
+  app.querySelectorAll("[data-runtime-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedRuntimeTarget = button.dataset.runtimeTarget || "three";
+      app.querySelectorAll("[data-runtime-target]").forEach((option) => {
+        option.classList.toggle("selected", option === button);
+      });
+      runtimeStatus.textContent = runtimeLabel(selectedRuntimeTarget);
+      setStatus(`输出目标切换为 ${runtimeLabel(selectedRuntimeTarget)}`);
     });
   });
   app.querySelector("#exportProject").addEventListener("click", () => copyProjectJson(app.querySelector("#selectedLayerName")));
@@ -1180,15 +1217,10 @@ export function createMotionEditor({ motionForge, canvas }) {
 
 async function fetchFigmaFile(figmaUrl, token) {
   const { fileKey, nodeId } = parseFigmaUrl(figmaUrl);
-  const response = await fetch(`https://api.figma.com/v1/files/${fileKey}`, {
-    headers: {
-      "X-Figma-Token": token,
-    },
-  });
+  const response = await figmaApiFetch(`files/${fileKey}`, token);
 
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error(`${response.status} ${response.statusText}${body ? `: ${body.slice(0, 120)}` : ""}`);
+    throw new Error(await figmaApiErrorMessage(response));
   }
 
   return {
@@ -1209,17 +1241,38 @@ async function attachFigmaImages(layers, fileKey, token) {
     format: "png",
     scale: "2",
   });
-  const response = await fetch(`https://api.figma.com/v1/images/${fileKey}?${params}`, {
-    headers: {
-      "X-Figma-Token": token,
-    },
-  });
+  const response = await figmaApiFetch(`images/${fileKey}?${params}`, token);
   if (!response.ok) return;
   const payload = await response.json();
   layers.forEach((layer) => {
     const imageUrl = payload.images?.[layer.figma.nodeId];
     if (imageUrl) layer.figma.imageUrl = imageUrl;
   });
+}
+
+async function figmaApiFetch(path, token) {
+  const headers = { "X-Figma-Token": token };
+  const directUrl = `https://api.figma.com/v1/${path}`;
+  try {
+    return await fetch(directUrl, { headers });
+  } catch (directError) {
+    try {
+      return await fetch(`/figma-api/v1/${path}`, { headers });
+    } catch (proxyError) {
+      throw new Error(
+        `网络请求失败。已尝试 Figma 官方接口和本地代理；如果刚更新过插件，请重启预览服务后再试。${proxyError.message || directError.message || ""}`
+      );
+    }
+  }
+}
+
+async function figmaApiErrorMessage(response) {
+  const body = await response.text().catch(() => "");
+  const detail = body ? `：${body.slice(0, 120)}` : "";
+  if (response.status === 401) return `Figma token 无效或已过期${detail}`;
+  if (response.status === 403) return `Figma token 没有这个文件的 file_content:read 权限${detail}`;
+  if (response.status === 404) return `没有找到这个 Figma 文件或节点${detail}`;
+  return `${response.status} ${response.statusText}${detail}`;
 }
 
 function parseFigmaUrl(value) {

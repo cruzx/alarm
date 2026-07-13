@@ -701,6 +701,12 @@ button:disabled {
   background: rgba(255, 255, 255, 0.045);
 }
 
+.engine-panel .subhead {
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
 .engine-options {
   display: grid;
   grid-template-columns: 1fr 1fr;
