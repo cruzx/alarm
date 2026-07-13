@@ -156,6 +156,8 @@ export function createMotionEditor({ motionForge, canvas }) {
   let suppressCanvasClick = false;
   let canvasPanX = 0;
   let canvasPanY = 0;
+  let lockedPanScrollLeft = 0;
+  let lockedPanScrollTop = 0;
   let zoomIndex = 0;
   const zoomOptions = [
     { label: "Fit", value: "fit" },
@@ -365,6 +367,10 @@ export function createMotionEditor({ motionForge, canvas }) {
   const setSpacePanKey = (isActive) => {
     if (isActive && activeCanvasDrag) return;
     spacePanKeyActive = isActive;
+    if (isActive) {
+      lockedPanScrollLeft = composition.scrollLeft;
+      lockedPanScrollTop = composition.scrollTop;
+    }
     document.body.classList.toggle("space-pan-ready", isActive);
     if (!isActive) finishCanvasPan();
   };
@@ -1249,10 +1255,15 @@ export function createMotionEditor({ motionForge, canvas }) {
   const handleEditorKeyDown = (event) => {
     const key = event.key.toLowerCase();
     const commandKey = event.metaKey || event.ctrlKey;
-    if (event.code === "Space" && !event.repeat && !isEditableEventTarget(event.target)) {
+    const isSpaceKey = event.code === "Space" || event.key === " " || event.key === "Spacebar";
+    if (isSpaceKey && !isEditableEventTarget(event.target)) {
       event.preventDefault();
       event.stopPropagation();
-      setSpacePanKey(true);
+      if (spacePanKeyActive) {
+        composition.scrollLeft = lockedPanScrollLeft;
+        composition.scrollTop = lockedPanScrollTop;
+      }
+      if (!event.repeat) setSpacePanKey(true);
       return;
     }
     if (commandKey && (key === "z" || key === "y") && !isTextEntryEventTarget(event.target)) {
@@ -1272,7 +1283,7 @@ export function createMotionEditor({ motionForge, canvas }) {
   };
   window.addEventListener("keydown", handleEditorKeyDown, true);
   window.addEventListener("keyup", (event) => {
-    if (event.code === "Space") setSpacePanKey(false);
+    if (event.code === "Space" || event.key === " " || event.key === "Spacebar") setSpacePanKey(false);
   }, true);
   window.addEventListener("blur", () => setSpacePanKey(false));
   renderAll();
