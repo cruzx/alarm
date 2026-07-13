@@ -364,6 +364,10 @@ export function createMotionEditor({ motionForge, canvas }) {
     activeCanvasPan = null;
     document.body.classList.remove("canvas-pan-dragging");
   };
+  const exitSpacePanMode = () => {
+    setSpacePanKey(false);
+    suppressCanvasClick = false;
+  };
   const setSpacePanKey = (isActive) => {
     if (isActive && activeCanvasDrag) return;
     spacePanKeyActive = isActive;
@@ -1097,6 +1101,12 @@ export function createMotionEditor({ motionForge, canvas }) {
     zoomByWheel(event.deltaY);
   }, { passive: false });
   composition.addEventListener("pointerdown", startCanvasPan);
+  composition.addEventListener("click", (event) => {
+    if (!suppressCanvasClick) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressCanvasClick = false;
+  }, true);
 
   window.addEventListener("pointermove", (event) => {
     updateDraggedLayerPosition(event);
@@ -1283,9 +1293,9 @@ export function createMotionEditor({ motionForge, canvas }) {
   };
   window.addEventListener("keydown", handleEditorKeyDown, true);
   window.addEventListener("keyup", (event) => {
-    if (event.code === "Space" || event.key === " " || event.key === "Spacebar") setSpacePanKey(false);
+    if (event.code === "Space" || event.key === " " || event.key === "Spacebar") exitSpacePanMode();
   }, true);
-  window.addEventListener("blur", () => setSpacePanKey(false));
+  window.addEventListener("blur", exitSpacePanMode);
   renderAll();
   if (storedFigmaToken && TARGET_FIGMA_URL && !motionForge.project.layers.length) {
     window.setTimeout(() => {
