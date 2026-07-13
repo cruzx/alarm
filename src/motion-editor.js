@@ -1034,7 +1034,7 @@ export function createMotionEditor({ motionForge, canvas }) {
   });
 
   composition.addEventListener("wheel", (event) => {
-    if (!event.shiftKey) return;
+    if (!event.metaKey && !event.ctrlKey) return;
     event.preventDefault();
     zoomByWheel(event.deltaY);
   }, { passive: false });
