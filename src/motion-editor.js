@@ -857,10 +857,9 @@ export function createMotionEditor({ motionForge, canvas }) {
   }
 
   function hasTangibleLayerContent(layer) {
-    const showContent = layer.figma?.isCanvasSnapshot || layer.figma?.previewVisible !== false || layer.motionTarget;
     const hasText = layer.figma?.type === "TEXT" && Boolean(layer.figma?.characters || layer.name);
-    const hasImage = showContent && Boolean(layer.figma?.imageUrl);
-    const isLeafShape = showContent && !layer.figma?.hasChildren && !layer.figma?.isCanvasSnapshot;
+    const hasImage = Boolean(layer.figma?.imageUrl);
+    const isLeafShape = !layer.figma?.hasChildren && !layer.figma?.isCanvasSnapshot;
     return hasImage || hasText || isLeafShape;
   }
 
