@@ -856,7 +856,15 @@ export function createMotionEditor({ motionForge, canvas }) {
     window.setTimeout(() => group.classList.remove("focus-pulse"), 650);
   }
 
-  function pickLayerAtPoint(clientX, clientY) {
+  function hasTangibleLayerContent(layer) {
+    const showContent = layer.figma?.isCanvasSnapshot || layer.figma?.previewVisible !== false || layer.motionTarget;
+    const hasText = layer.figma?.type === "TEXT" && Boolean(layer.figma?.characters || layer.name);
+    const hasImage = showContent && Boolean(layer.figma?.imageUrl);
+    const isLeafShape = showContent && !layer.figma?.hasChildren && !layer.figma?.isCanvasSnapshot;
+    return hasImage || hasText || isLeafShape;
+  }
+
+  function pickLayerAtPoint(clientX, clientY, options = {}) {
     const frameBox = previewFrame.getBoundingClientRect();
     const scale = previewFrame.clientWidth / motionForge.width || 1;
     const localX = clientX - frameBox.left;
@@ -864,7 +872,7 @@ export function createMotionEditor({ motionForge, canvas }) {
     const seconds = Number(scrubber.value);
     return motionForge.project.layers
       .map((layer, index) => ({ layer, index }))
-      .filter(({ layer }) => layer.kind === "figma")
+      .filter(({ layer }) => layer.kind === "figma" && !layer.hidden)
       .map(({ layer, index }) => {
         const layerScale = (getValue(layer.id, "scale", seconds) || 100) / 100;
         const width = Math.max(1, (layer.figma?.width || 0) * scale * layerScale);
@@ -874,25 +882,54 @@ export function createMotionEditor({ motionForge, canvas }) {
         const left = centerX - width / 2;
         const top = centerY - height / 2;
         const hit = localX >= left && localX <= left + width && localY >= top && localY <= top + height;
-        return { layer, index, hit, area: width * height };
+        return {
+          layer,
+          index,
+          hit,
+          area: width * height,
+          tangible: hasTangibleLayerContent(layer),
+        };
       })
       .filter((candidate) => candidate.hit)
       .sort((a, b) => {
+        if (a.tangible !== b.tangible) return a.tangible ? -1 : 1;
         if (a.layer.staticCanvas !== b.layer.staticCanvas) return a.layer.staticCanvas ? 1 : -1;
         if (a.layer.figma?.isCanvasSnapshot !== b.layer.figma?.isCanvasSnapshot) return a.layer.figma?.isCanvasSnapshot ? 1 : -1;
         const depthDelta = (b.layer.figma?.depth || 0) - (a.layer.figma?.depth || 0);
-        if (depthDelta) return depthDelta;
+        if (options.deep && depthDelta) return depthDelta;
         const areaDelta = a.area - b.area;
         if (areaDelta) return areaDelta;
+        if (!options.deep && depthDelta) return depthDelta;
         return b.index - a.index;
       })[0]?.layer || null;
   }
 
   function selectPiercedLayerAtPoint(event) {
-    const layer = pickLayerAtPoint(event.clientX, event.clientY);
+    const layer = pickLayerAtPoint(event.clientX, event.clientY, { deep: true });
     if (!layer) return false;
     selectLayerById(layer.id, "已穿透选中图层");
     return true;
+  }
+
+  function beginCanvasLayerDrag(layer, event) {
+    const element = figmaLayerElements.get(layer.id);
+    if (!element || layer.staticCanvas) return;
+    pushHistory();
+    if (layer.kind === "figma" && !layer.motionTarget) {
+      layer.motionTarget = true;
+      importStatus.textContent = "已勾选为动效目标";
+    }
+    activeCanvasDrag = {
+      layerId: layer.id,
+      element,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startX: getValue(layer.id, "positionX", Number(scrubber.value)),
+      startY: getValue(layer.id, "positionY", Number(scrubber.value)),
+    };
+    document.body.classList.add("canvas-layer-dragging");
+    element.classList.add("dragging-canvas-layer");
+    element.setPointerCapture?.(event.pointerId);
   }
 
   function downloadTextFile(filename, text, type = "application/json") {
@@ -979,7 +1016,8 @@ export function createMotionEditor({ motionForge, canvas }) {
             return;
           }
           event.stopPropagation();
-          selectLayerById(layer.id, "已选中画布图层");
+          const pickedLayer = pickLayerAtPoint(event.clientX, event.clientY) || layer;
+          selectLayerById(pickedLayer.id, "已选中画布图层");
         });
         element.addEventListener("pointerdown", (event) => {
           if (event.button !== 0) return;
@@ -992,24 +1030,9 @@ export function createMotionEditor({ motionForge, canvas }) {
           }
           event.preventDefault();
           event.stopPropagation();
-          selectLayerById(layer.id, "已选中画布图层");
-          if (layer.staticCanvas) return;
-          pushHistory();
-          if (layer.kind === "figma" && !layer.motionTarget) {
-            layer.motionTarget = true;
-            importStatus.textContent = "已勾选为动效目标";
-          }
-          activeCanvasDrag = {
-            layerId: layer.id,
-            element,
-            startClientX: event.clientX,
-            startClientY: event.clientY,
-            startX: getValue(layer.id, "positionX", Number(scrubber.value)),
-            startY: getValue(layer.id, "positionY", Number(scrubber.value)),
-          };
-          document.body.classList.add("canvas-layer-dragging");
-          element.classList.add("dragging-canvas-layer");
-          element.setPointerCapture?.(event.pointerId);
+          const pickedLayer = pickLayerAtPoint(event.clientX, event.clientY) || layer;
+          selectLayerById(pickedLayer.id, "已选中画布图层");
+          beginCanvasLayerDrag(pickedLayer, event);
         });
         element.addEventListener("keydown", (event) => {
           if (event.key === "Enter" || event.key === " ") {

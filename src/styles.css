@@ -700,6 +700,7 @@ button:disabled {
 
 .figma-layer.ghost:not(.selected) {
   opacity: 0 !important;
+  pointer-events: none;
 }
 
 .figma-layer.ghost.selected {
