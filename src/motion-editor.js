@@ -914,10 +914,6 @@ export function createMotionEditor({ motionForge, canvas }) {
     const element = figmaLayerElements.get(layer.id);
     if (!element || layer.staticCanvas) return;
     pushHistory();
-    if (layer.kind === "figma" && !layer.motionTarget) {
-      layer.motionTarget = true;
-      importStatus.textContent = "已勾选为动效目标";
-    }
     activeCanvasDrag = {
       layerId: layer.id,
       element,
@@ -980,7 +976,7 @@ export function createMotionEditor({ motionForge, canvas }) {
       const s = getValue(layer.id, "scale", seconds) / 100;
       const r = getValue(layer.id, "rotation", seconds);
       const opacity = getValue(layer.id, "opacity", seconds) / 100;
-      const showContent = layer.figma.isCanvasSnapshot || layer.figma.previewVisible !== false || layer.motionTarget;
+      const showContent = layer.figma.isCanvasSnapshot || layer.figma.previewVisible !== false;
       const hasImage = showContent && Boolean(layer.figma.imageUrl);
       const style = [
         `left:${x * scale}px`,

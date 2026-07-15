@@ -627,7 +627,11 @@ function setCanvasSize(width, height) {
 
 function renderCaptureFigmaLayers(seconds) {
   if (!captureFigmaStage) return;
-  const figmaLayers = project.layers.filter((layer) => layer.kind === "figma" && !layer.hidden);
+  const figmaLayers = project.layers.filter((layer) => (
+    layer.kind === "figma" &&
+    !layer.hidden &&
+    (layer.figma.isCanvasSnapshot || layer.figma.previewVisible !== false)
+  ));
   captureFigmaStage.innerHTML = figmaLayers.map((layer) => {
     const x = timelineValue(layer.id, "positionX", seconds);
     const y = timelineValue(layer.id, "positionY", seconds);
