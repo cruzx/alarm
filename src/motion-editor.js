@@ -927,6 +927,23 @@ export function createMotionEditor({ motionForge, canvas }) {
     element.setPointerCapture?.(event.pointerId);
   }
 
+  function handleCanvasStageSelection(event, shouldDrag = false) {
+    if (suppressCanvasClick) {
+      suppressCanvasClick = false;
+      event.preventDefault();
+      event.stopPropagation();
+      return true;
+    }
+    if (spacePanKeyActive || event.button !== 0) return false;
+    const pickedLayer = pickLayerAtPoint(event.clientX, event.clientY, { deep: event.metaKey || event.ctrlKey });
+    if (!pickedLayer) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    selectLayerById(pickedLayer.id, event.metaKey || event.ctrlKey ? "已穿透选中图层" : "已选中画布图层");
+    if (shouldDrag) beginCanvasLayerDrag(pickedLayer, event);
+    return true;
+  }
+
   function downloadTextFile(filename, text, type = "application/json") {
     const blob = new Blob([text], { type });
     const url = URL.createObjectURL(blob);
@@ -998,36 +1015,10 @@ export function createMotionEditor({ motionForge, canvas }) {
         element.role = "button";
         element.tabIndex = 0;
         element.addEventListener("click", (event) => {
-          if (suppressCanvasClick) {
-            suppressCanvasClick = false;
-            event.preventDefault();
-            event.stopPropagation();
-            return;
-          }
-          if (event.metaKey || event.ctrlKey) {
-            event.preventDefault();
-            event.stopPropagation();
-            selectPiercedLayerAtPoint(event);
-            return;
-          }
-          event.stopPropagation();
-          const pickedLayer = pickLayerAtPoint(event.clientX, event.clientY) || layer;
-          selectLayerById(pickedLayer.id, "已选中画布图层");
+          handleCanvasStageSelection(event, false);
         });
         element.addEventListener("pointerdown", (event) => {
-          if (event.button !== 0) return;
-          if (spacePanKeyActive) return;
-          if (event.metaKey || event.ctrlKey) {
-            event.preventDefault();
-            event.stopPropagation();
-            selectPiercedLayerAtPoint(event);
-            return;
-          }
-          event.preventDefault();
-          event.stopPropagation();
-          const pickedLayer = pickLayerAtPoint(event.clientX, event.clientY) || layer;
-          selectLayerById(pickedLayer.id, "已选中画布图层");
-          beginCanvasLayerDrag(pickedLayer, event);
+          handleCanvasStageSelection(event, true);
         });
         element.addEventListener("keydown", (event) => {
           if (event.key === "Enter" || event.key === " ") {
@@ -1195,6 +1186,12 @@ export function createMotionEditor({ motionForge, canvas }) {
     event.preventDefault();
     zoomByWheel(event.deltaY);
   }, { passive: false });
+  figmaStage.addEventListener("pointerdown", (event) => {
+    handleCanvasStageSelection(event, true);
+  }, true);
+  figmaStage.addEventListener("click", (event) => {
+    handleCanvasStageSelection(event, false);
+  }, true);
   composition.addEventListener("pointerdown", startCanvasPan);
   composition.addEventListener("click", (event) => {
     if (!suppressCanvasClick) return;
